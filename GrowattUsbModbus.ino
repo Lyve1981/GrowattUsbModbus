@@ -17,11 +17,12 @@ constexpr auto OFF	= HIGH;
 
 ConfigFile					g_config;
 
-ESP8266HTTPUpdateServer		g_httpUpdater;
 WiFiManager					g_wm;
 WiFiClient					g_wifiClient;
 PubSubClient				g_mqttClient(g_wifiClient);
 ModBus						g_modbus;
+ESP8266WebServer			g_httpServer(80);
+ESP8266HTTPUpdateServer		g_httpUpdater;
 
 // runtime config
 String		g_mqttServer;
@@ -31,6 +32,8 @@ String		g_mqttPassword;
 String		g_mqttSubTopic;
 String		g_mqttPubTopic;
 String		g_mqttWillTopic;
+String		g_otaUser;
+String		g_otaPassword;
 
 char g_jsonOutBuffer[4096];
 constexpr uint32_t g_modbusBufferSize = 256;
@@ -295,6 +298,8 @@ void setup()
 	g_mqttSubTopic = g_config.get("g_mqttSubTopic", DefaultConfig::mqttSubTopic);
 	g_mqttPubTopic = g_config.get("g_mqttPubTopic", DefaultConfig::mqttPubTopic);
 	g_mqttWillTopic = g_config.get("g_mqttWillTopic", DefaultConfig::mqttWillTopic);
+	g_otaUser = g_config.get("g_otaUser", DefaultConfig::otaUser);
+	g_otaPassword = g_config.get("g_otaPassword", DefaultConfig::otaPassword);
 
     auto mqttServer = new WiFiManagerParameter("server", "MQTT Server", g_mqttServer.c_str(), 32);
     auto mqttPort = new WiFiManagerParameter("port", "MQTT Port", String(g_mqttPort).c_str(), 5);
@@ -303,6 +308,8 @@ void setup()
     auto mqttTopicSub = new WiFiManagerParameter("topicSub", "MQTT Command Topic", g_mqttSubTopic.c_str(), 64);
     auto mqttTopicPub = new WiFiManagerParameter("topicPub", "MQTT Publish Topic", g_mqttPubTopic.c_str(), 64);
     auto mqttTopicWill = new WiFiManagerParameter("topicWill", "MQTT Will Topic", g_mqttWillTopic.c_str(), 64);
+    auto otaUser = new WiFiManagerParameter("otaUser", "OTA Update User", g_otaUser.c_str(), 64);
+    auto otaPassword = new WiFiManagerParameter("otaPassword", "OTA Update Password", g_otaPassword.c_str(), 64);
 
     g_wm.addParameter(mqttServer);
     g_wm.addParameter(mqttPort);
@@ -311,6 +318,8 @@ void setup()
     g_wm.addParameter(mqttTopicSub);
     g_wm.addParameter(mqttTopicPub);
     g_wm.addParameter(mqttTopicWill);
+    g_wm.addParameter(otaUser);
+    g_wm.addParameter(otaPassword);
 
     g_wm.setSaveParamsCallback([&]()
     {
@@ -321,6 +330,8 @@ void setup()
     	g_mqttSubTopic = mqttTopicSub->getValue();
     	g_mqttPubTopic = mqttTopicPub->getValue();
     	g_mqttWillTopic = mqttTopicWill->getValue();
+    	g_otaUser = otaUser->getValue();
+    	g_otaPassword = otaPassword->getValue();
 
 		g_config.set("g_mqttServer", g_mqttServer.c_str());
 		g_config.set("g_mqttPort", String(g_mqttPort).c_str());
@@ -329,6 +340,8 @@ void setup()
 		g_config.set("g_mqttSubTopic", g_mqttSubTopic.c_str());
 		g_config.set("g_mqttPubTopic", g_mqttPubTopic.c_str());
 		g_config.set("g_mqttWillTopic", g_mqttWillTopic.c_str());
+		g_config.set("g_otaUser", g_otaUser.c_str());
+		g_config.set("g_otaPassword", g_otaPassword.c_str());
 
 		delay(1000);
     });
@@ -354,7 +367,10 @@ void setup()
 	if(!modbusReconnect())
 		ESP.restart();
 
-	Serial.println("Boot completed");
+    g_httpUpdater.setup(&g_httpServer, "/update", g_otaUser, g_otaPassword);
+    g_httpServer.begin();
+
+	Serial.println("Boot completed, Updated!!!");
 }
 
 void loop()
@@ -368,6 +384,7 @@ void loop()
 		ESP.restart();
 
 	g_mqttClient.loop();
+	g_httpServer.handleClient();
 
 	auto t = millis() & 0x1ff;
 	if(t < 50)
