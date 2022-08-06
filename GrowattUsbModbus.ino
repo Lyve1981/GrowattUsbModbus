@@ -36,17 +36,6 @@ char g_jsonOutBuffer[4096];
 constexpr uint32_t g_modbusBufferSize = 256;
 uint16_t g_modbusBuffer[g_modbusBufferSize];
 
-void debugln(const String& msg)
-{
-	if(g_debug)
-		Serial.println(msg);
-}
-void debug(const String& msg)
-{
-	if(g_debug)
-		Serial.print(msg);
-}
-
 bool sendBuffer(const char* buffer, uint32_t len)
 {
 	if(!buffer || !len)
