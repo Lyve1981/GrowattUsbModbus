@@ -71,8 +71,10 @@ bool sendBuffer(const char* buffer, uint32_t len)
 	return true;
 }
 
-bool sendJson(const DynamicJsonDocument& json)
+bool sendJson(DynamicJsonDocument& json)
 {
+	json["timestamp"] = millis();
+
 	const auto len = serializeJson(json, g_jsonOutBuffer);
 
 	if(len <= 0)
