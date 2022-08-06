@@ -379,8 +379,11 @@ void loop()
 
 	g_mqttClient.loop();
 
-	digitalWrite(LED, ON);
-	delay(100);
-	digitalWrite(LED, OFF);
-	delay(900);
+	auto t = millis() & 0x1ff;
+	if(t < 50)
+		digitalWrite(LED, ON);
+	else
+		digitalWrite(LED, OFF);
+
+	delay(10);
 }
