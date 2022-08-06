@@ -83,13 +83,23 @@ bool sendJson(DynamicJsonDocument& json)
 	return sendBuffer(g_jsonOutBuffer, len);
 }
 
-bool sendError(const StaticJsonDocument<1024>& request, const char* error)
+bool sendError(const StaticJsonDocument<1024>* request, const char* error)
 {
 	DynamicJsonDocument r(2048);
 	r["status"] = "error";
-	r["request"] = request;
+	if(request)
+		r["request"] = *request;
 	r["error"] = error;
 	return sendJson(r);
+}
+
+bool sendError(const StaticJsonDocument<1024>& request, const char* error)
+{
+	sendError(&request, error);
+}
+bool sendError(const char* error)
+{
+	sendError(nullptr, error);
 }
 
 bool readModBusRegisters(const StaticJsonDocument<1024>& request, bool holdingRegs)
@@ -263,6 +273,15 @@ bool modbusReconnect()
 		digitalWrite(LED, OFF);
 		delay(2000);
 	}
+	
+	sendError("Modbus connection failed");
+
+	{
+		const auto t = millis();
+		while((millis() - t) < 3000)
+			g_mqttClient.loop();
+	}
+
 	return false;
 }
 
