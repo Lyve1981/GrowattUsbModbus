@@ -35,6 +35,7 @@ What the Growatt Inverter wants to see on the USB port is a CH340 USB => Serial 
 As there are too many different inverters with varying ModBus registers, I kept this project generic. You can request register values via MQTT, the response will be a register => value map as json. Mapping these registers to useful values is on your own. I use Node-RED to do this, I'm gonna commit the Node-RED flow soon.
 
 The ESP communicates via MQTT in json format. Once you've installed everything, you can send an MQTT message to request a set of ModBus register from your Growatt inverter. Example:
+Publish to ``energy/gromodbus/request``
 ```
 {
    "command": "readinputregisters",
@@ -44,6 +45,7 @@ The ESP communicates via MQTT in json format. Once you've installed everything, 
 ```
 
 The ESP will respond with a message such as this upon success:
+``energy/gromodbus/response``
 ```
 {
   "status": "ok",
@@ -63,6 +65,7 @@ The ESP will respond with a message such as this upon success:
 ```
 
 In case of an error, an error response is returned:
+``energy/gromodbus/response``
 ```
 {
    "status":"error",
