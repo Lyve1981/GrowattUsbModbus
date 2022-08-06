@@ -276,6 +276,8 @@ bool modbusReconnect()
 
 void setup()
 {
+	LittleFS.begin();
+
 	if(g_debug)
 		Serial.begin(115200);	// debug
 
