@@ -1,0 +1,331 @@
+[
+    {
+        "id": "5dae21e1b0933241",
+        "type": "tab",
+        "label": "GrowattUSB",
+        "disabled": false,
+        "info": "",
+        "env": []
+    },
+    {
+        "id": "d35deb7d63e2b781",
+        "type": "mqtt in",
+        "z": "5dae21e1b0933241",
+        "name": "",
+        "topic": "energy/gromodbus/response",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "24fa06d723ab4714",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 140,
+        "y": 180,
+        "wires": [
+            [
+                "9e3c95f2faa643c5"
+            ]
+        ]
+    },
+    {
+        "id": "9e3c95f2faa643c5",
+        "type": "json",
+        "z": "5dae21e1b0933241",
+        "name": "",
+        "property": "payload",
+        "action": "obj",
+        "pretty": false,
+        "x": 210,
+        "y": 240,
+        "wires": [
+            [
+                "7c06c1c5e68de54d"
+            ]
+        ]
+    },
+    {
+        "id": "083eeedc4d225cf5",
+        "type": "mqtt out",
+        "z": "5dae21e1b0933241",
+        "name": "",
+        "topic": "energy/gromodbus/request",
+        "qos": "",
+        "retain": "",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "24fa06d723ab4714",
+        "x": 940,
+        "y": 220,
+        "wires": []
+    },
+    {
+        "id": "aadc3af0e7e9bb20",
+        "type": "json",
+        "z": "5dae21e1b0933241",
+        "name": "",
+        "property": "payload",
+        "action": "str",
+        "pretty": false,
+        "x": 870,
+        "y": 160,
+        "wires": [
+            [
+                "083eeedc4d225cf5"
+            ]
+        ]
+    },
+    {
+        "id": "f230988aec308b5b",
+        "type": "inject",
+        "z": "5dae21e1b0933241",
+        "name": "every minute",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "60",
+        "crontab": "",
+        "once": false,
+        "onceDelay": 0.1,
+        "topic": "",
+        "payload": "0",
+        "payloadType": "num",
+        "x": 300,
+        "y": 60,
+        "wires": [
+            [
+                "e1e4b663db7b6ec1"
+            ]
+        ]
+    },
+    {
+        "id": "a4059454c4b1bc5d",
+        "type": "function",
+        "z": "5dae21e1b0933241",
+        "name": "requestRegs",
+        "func": "var registerSetIndex = msg.payload;\n\n// As we query various ranges of registers, we send multiple requests\nconst registerSets =\n[\n    // inputs\n    [0, 64, 0],     // Inverter is limited to return at most 64 registers per request\n    [64, 61, 0],    // So we split this up into two chunks\n    [1000, 64, 0],\n    [1064, 61, 0],\n\n    // holdings\n    [0, 64, 1],\n    [64, 61, 1],\n    [1000, 64, 1],\n    [1064, 61, 1]\n];\n\nif(registerSetIndex >= registerSets.length)\n    return [null, {reset: true}]; // finished\n\nvar rs = registerSets[registerSetIndex];\n\n// build request object to be sent via MQTT to ModBus2MQTT proxy\nvar index = rs[0];\nvar count = rs[1];\nvar holding = rs[2] != 0 ? true : false;\n\nmsg.payload = {\n    \"command\": holding ? \"readholdingregisters\" : \"readinputregisters\",\n    \"index\": index,\n    \"count\": count,\n    \"requestIndex\": registerSetIndex,\n    \"requestMax\": registerSets.length,\n    \"holding\": holding\n};\n\nreturn [msg, null];",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 650,
+        "y": 200,
+        "wires": [
+            [
+                "aadc3af0e7e9bb20"
+            ],
+            [
+                "626ca8c5bdb5f211",
+                "e1e4b663db7b6ec1"
+            ]
+        ]
+    },
+    {
+        "id": "7c06c1c5e68de54d",
+        "type": "function",
+        "z": "5dae21e1b0933241",
+        "name": "parseJson",
+        "func": "var j = msg.payload;\n\nif(j == null)\n    return null;\n\nvar status = j.status;\nvar data = j.data;\nvar request = j.request;\n\nif(status != \"ok\")\n{\n    node.error(\"Error response from Growatt Proxy: \" + JSON.stringify(j, null, 2), msg);\n    return null;\n}\n\nfor (var i = 0; i < count; ++i)\n{\n    if(data[i] == 65535)\n    {\n        node.error(\"Data read failed, register \" + i + \" contains invalid value \" + data[i]);\n        return null;\n    }\n}\n\n// store the retrieved register values in this flow\n\nvar index = request.index;\nvar count = request.count;\nvar holding = request.holding;\n\nvar key = holding ? \"regHoldings\" : \"regInputs\";\n\nvar currentData = flow.get(key);\n\nif(currentData == null)\n    currentData = {};\n\nfor(var i=0; i<count; ++i)\n    currentData[i+index] = data[i];\n\nflow.set(key, currentData);\n\nmsg.payload = request.requestIndex + 1;\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 190,
+        "y": 300,
+        "wires": [
+            [
+                "bfcf1f5f44c4356e"
+            ]
+        ]
+    },
+    {
+        "id": "48c0b088398b78da",
+        "type": "function",
+        "z": "5dae21e1b0933241",
+        "name": "resetData",
+        "func": "flow.set(\"regInputs\", null);\nflow.set(\"regHoldings\", null);\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 700,
+        "y": 80,
+        "wires": [
+            [
+                "a4059454c4b1bc5d"
+            ]
+        ]
+    },
+    {
+        "id": "bf7a825e1150d34d",
+        "type": "debug",
+        "z": "5dae21e1b0933241",
+        "name": "logResult",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 920,
+        "y": 400,
+        "wires": []
+    },
+    {
+        "id": "626ca8c5bdb5f211",
+        "type": "function",
+        "z": "5dae21e1b0933241",
+        "name": "createResult",
+        "func": "// Note: mapping names are chosen to be compatible with grott\n// https://github.com/johanmeijer/grott\n\n// Mapping for Growatt hybrid inverter SPH 5000TL3 BH\nconst mapping = \n    [\n        // name, holding reg?, register index 16 bits MSB, 16 bits LSB\n        [\"pvstatus\", false, 0],\n        [\"pvpowerin\", false, 1, 2],\n        [\"pv1voltage\", false, 3],\n        [\"pv1current\", false, 4],\n        [\"pv1watt\", false, 5, 6],\n        [\"pv2voltage\", false, 7],\n        [\"pv2current\", false, 8],\n        [\"pv2watt\", false, 9, 10],\n\n        [\"pvpowerout\", false, 35, 36],\n        [\"pvfrequentie\", false, 37],\n        [\"pvgridvoltage\", false, 38],\n        [\"pvgridcurrent\", false, 39],\n        [\"pvgridpower\", false, 40, 41],\n        [\"pvgridvoltage2\", false, 42],\n        [\"pvgridcurrent2\", false, 43],\n        [\"pvgridpower2\", false, 44, 45],\n        [\"pvgridvoltage3\", false, 46],\n        [\"pvgridcurrent3\", false, 47],\n        [\"pvgridpower3\", false, 48, 49],\n\n        [\"eactoday\", false, 53, 54],\n        [\"pvenergytoday\", false, 53, 54],   // note: dupe of eactoday\n        [\"eactotal\", false, 55, 56],\n        [\"totworktime\", false, 57, 58],\n        [\"epv1today\", false, 59, 60],\n        [\"epv1total\", false, 61, 62],\n        [\"epv2today\", false, 63, 64],\n        [\"epv2total\", false, 65, 66],\n\n        [\"epvtotal\", false, 91, 92],\n        [\"pvtemperature\", false, 93],\n        [\"pvipmtemperature\", false, 94],\n        [\"pvboosttemp\", false, 95],\n\n        [\"bat_dsp\", false, 97],\n\n        [\"eacharge_today\", false, 112, 113],\n        [\"eacharge_total\", false, 114, 115],\n\n        [\"batterytype\", false, 119],\n\n        [\"uwsysworkmode\", false, 1000],\n        [\"systemfaultword0\", false, 1001],\n        [\"systemfaultword1\", false, 1002],\n        [\"systemfaultword2\", false, 1003],\n        [\"systemfaultword3\", false, 1004],\n        [\"systemfaultword4\", false, 1005],\n        [\"systemfaultword5\", false, 1006],\n        [\"systemfaultword6\", false, 1007],\n        [\"systemfaultword7\", false, 1008],\n        [\"pdischarge1\", false, 1009, 1010],\n        [\"p1charge1\", false, 1011, 1012],\n        [\"vbat\", false, 1013],\n        [\"SOC\", false, 1014],\n        [\"pactouserr\", false, 1015, 1016],\n\n        [\"pactousertot\", false, 1021, 1022],\n\n        [\"pactogridr\", false, 1023, 1024],\n\n        [\"pactogridtot\", false, 1029, 1030],\n        [\"plocaloadr\", false, 1031, 1032],\n        [\"plocaloadtot\", false, 1037, 1038],\n\n        [\"spdspstatus\", false, 1041],\n        [\"spbusvolt\", false, 1042],\n\n        [\"etouser_tod\", false, 1044, 1045],\n        [\"etouser_tot\", false, 1046, 1047],\n        [\"etogrid_tod\", false, 1048, 1049],\n        [\"etogrid_tot\", false, 1050, 1051],\n        [\"edischarge1_tod\", false, 1052, 1053],\n        [\"edischarge1_tot\", false, 1054, 1055],\n\n        [\"eharge1_tod\", false, 1056, 1057],\n        [\"eharge1_tot\", false, 1058, 1059],\n        [\"elocalload_tod\", false, 1060, 1061],\n        [\"elocalload_tot\", false, 1062, 1063],\n    ];\n\nvar regsI = flow.get(\"regInputs\");\nvar regsH = flow.get(\"regHoldings\");\n\nvar fields = {};\n\nfor(var i=0; i<mapping.length; ++i)\n{\n    var m = mapping[i];\n\n    var name = m[0];\n    var holding = m[1];\n\n    var rH = parseInt(m[2]);\n    var rL = parseInt(m[3]);\n\n    var regs = holding ? regsH : regsI;\n\n    var valH = regs[rH];\n\n    if(valH === undefined)\n    {\n        node.error(\"Failed to retrieve value for register \" + rH + \" for name \" + name);\n        return null;\n    }\n\n    var val = valH;\n\n    if(!isNaN(rL))\n    {\n        var valL = regs[rL];\n\n        if (valL === undefined) \n        {\n            node.error(\"Failed to retrieve value for register \" + rH + \" for name \" + name);\n            return null;\n        }\n\n        val <<= 16;\n        val |= valL;\n    }\n\n    fields[name] = parseInt(val);\n}\n\n// if the inverter reports local time:\nvar date = new Date(regsH[45], regsH[46] - 1, regsH[47], regsH[48], regsH[49], regsH[50]);\n\n// use this version if it reports UTC instead:\n//var date = new Date(Date.UTC(regsH[45], regsH[46] - 1, regsH[47], regsH[48], regsH[49], regsH[50]));\n\n/**\n* @param {{ [x: string]: number; }} regs\n* @param {number} index\n* @param {number} count\n*/\nfunction readText(regs, index, count)\n{\n    var text = \"\";\n\n    for(var i=index; i<index+count; ++i)\n    {\n        var c0 = regs[i] >> 8;\n        var c1 = regs[i] & 0xff;\n        text += String.fromCharCode(c0, c1);\n    }\n    return text;\n}\n\nvar serial = readText(regsH, 23, 5);\n\nfields[\"datalogserial\"] = \"ModBus2USB\";\nfields[\"pvserial\"] = serial;\n\nvar json = {};\n\njson[\"time\"] = date;\njson[\"fields\"] = fields;\n\nmsg.payload = json;\n\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 710,
+        "y": 400,
+        "wires": [
+            [
+                "bf7a825e1150d34d",
+                "f153242c66325c64",
+                "6bd69537198740bd"
+            ]
+        ]
+    },
+    {
+        "id": "e1e4b663db7b6ec1",
+        "type": "trigger",
+        "z": "5dae21e1b0933241",
+        "name": "retry",
+        "op1": "",
+        "op2": "",
+        "op1type": "pay",
+        "op2type": "pay",
+        "duration": "5",
+        "extend": false,
+        "overrideDelay": false,
+        "units": "s",
+        "reset": "",
+        "bytopic": "all",
+        "topic": "topic",
+        "outputs": 1,
+        "x": 570,
+        "y": 80,
+        "wires": [
+            [
+                "48c0b088398b78da"
+            ]
+        ]
+    },
+    {
+        "id": "f153242c66325c64",
+        "type": "link out",
+        "z": "5dae21e1b0933241",
+        "name": "GrowattData",
+        "mode": "link",
+        "links": [
+            "9718176cb3794c40",
+            "3dd47dd4f54fa987"
+        ],
+        "x": 875,
+        "y": 460,
+        "wires": []
+    },
+    {
+        "id": "6bd69537198740bd",
+        "type": "change",
+        "z": "5dae21e1b0933241",
+        "name": "",
+        "rules": [
+            {
+                "t": "set",
+                "p": "data",
+                "pt": "global",
+                "to": "payload",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 940,
+        "y": 340,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "bfcf1f5f44c4356e",
+        "type": "delay",
+        "z": "5dae21e1b0933241",
+        "name": "Growatt Inverter needs a break",
+        "pauseType": "delay",
+        "timeout": "100",
+        "timeoutUnits": "milliseconds",
+        "rate": "1",
+        "nbRateUnits": "1",
+        "rateUnits": "second",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": false,
+        "allowrate": false,
+        "outputs": 1,
+        "x": 430,
+        "y": 300,
+        "wires": [
+            [
+                "a4059454c4b1bc5d"
+            ]
+        ]
+    },
+    {
+        "id": "70e12a3d6a454dbb",
+        "type": "comment",
+        "z": "5dae21e1b0933241",
+        "name": "do something with the data",
+        "info": "",
+        "x": 1010,
+        "y": 460,
+        "wires": []
+    },
+    {
+        "id": "24fa06d723ab4714",
+        "type": "mqtt-broker",
+        "name": "",
+        "broker": "192.168.20.10",
+        "port": "1883",
+        "clientid": "",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    }
+]
