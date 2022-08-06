@@ -30,6 +30,7 @@ String		g_mqttUser;
 String		g_mqttPassword;
 String		g_mqttSubTopic;
 String		g_mqttPubTopic;
+String		g_mqttWillTopic;
 
 char g_jsonOutBuffer[4096];
 constexpr uint32_t g_modbusBufferSize = 256;
@@ -211,11 +212,12 @@ bool mqttReconnect()
 	{
 		g_mqttClient.setServer(g_mqttServer.c_str(), g_mqttPort);
 
-		if(g_mqttClient.connect(DefaultConfig::mqttClientName, g_mqttUser.c_str(), g_mqttPassword.c_str()))
+		if(g_mqttClient.connect(DefaultConfig::mqttClientName, g_mqttUser.c_str(), g_mqttPassword.c_str(), g_mqttWillTopic.c_str(), 2, true, "offline"))
 		{
 			debugln("MQTT connection established");
 			g_mqttClient.setCallback(onMqttMessage);
 			g_mqttClient.subscribe(g_mqttSubTopic.c_str());
+			g_mqttClient.publish(g_mqttWillTopic.c_str(), "online", true);
 			return true;
 		}
 		else
@@ -280,6 +282,7 @@ void setup()
 	g_mqttPassword = g_config.get("g_mqttPassword", DefaultConfig::mqttPassword);
 	g_mqttSubTopic = g_config.get("g_mqttSubTopic", DefaultConfig::mqttSubTopic);
 	g_mqttPubTopic = g_config.get("g_mqttPubTopic", DefaultConfig::mqttPubTopic);
+	g_mqttWillTopic = g_config.get("g_mqttWillTopic", DefaultConfig::mqttWillTopic);
 
     auto mqttServer = new WiFiManagerParameter("server", "MQTT Server", g_mqttServer.c_str(), 32);
     auto mqttPort = new WiFiManagerParameter("port", "MQTT Port", String(g_mqttPort).c_str(), 5);
@@ -287,6 +290,7 @@ void setup()
     auto mqttPassword = new WiFiManagerParameter("pass", "MQTT Password", g_mqttPassword.c_str(), 32);
     auto mqttTopicSub = new WiFiManagerParameter("topicSub", "MQTT Command Topic", g_mqttSubTopic.c_str(), 64);
     auto mqttTopicPub = new WiFiManagerParameter("topicPub", "MQTT Publish Topic", g_mqttPubTopic.c_str(), 64);
+    auto mqttTopicWill = new WiFiManagerParameter("topicWill", "MQTT Will Topic", g_mqttWillTopic.c_str(), 64);
 
     g_wm.addParameter(mqttServer);
     g_wm.addParameter(mqttPort);
@@ -294,6 +298,7 @@ void setup()
     g_wm.addParameter(mqttPassword);
     g_wm.addParameter(mqttTopicSub);
     g_wm.addParameter(mqttTopicPub);
+    g_wm.addParameter(mqttTopicWill);
 
     g_wm.setSaveParamsCallback([&]()
     {
@@ -303,6 +308,7 @@ void setup()
     	g_mqttPassword = mqttPassword->getValue();
     	g_mqttSubTopic = mqttTopicSub->getValue();
     	g_mqttPubTopic = mqttTopicPub->getValue();
+    	g_mqttWillTopic = mqttTopicWill->getValue();
 
 		g_config.set("g_mqttServer", g_mqttServer.c_str());
 		g_config.set("g_mqttPort", String(g_mqttPort).c_str());
@@ -310,6 +316,7 @@ void setup()
 		g_config.set("g_mqttPassword", g_mqttPassword.c_str());
 		g_config.set("g_mqttSubTopic", g_mqttSubTopic.c_str());
 		g_config.set("g_mqttPubTopic", g_mqttPubTopic.c_str());
+		g_config.set("g_mqttWillTopic", g_mqttWillTopic.c_str());
 
 		delay(1000);
     });

@@ -11,6 +11,7 @@ namespace DefaultConfig
 	constexpr const char* const mqttClientName = hostName;
 	constexpr const char* const mqttUser = "";
 	constexpr const char* const mqttPassword = "";
-	constexpr const char* const mqttSubTopic = "energy/gromodbus/command";
-	constexpr const char* const mqttPubTopic = "energy/gromodbus/status";
+	constexpr const char* const mqttSubTopic = "energy/gromodbus/request";
+	constexpr const char* const mqttPubTopic = "energy/gromodbus/response";
+	constexpr const char* const mqttWillTopic = "energy/gromodbus/status";
 }
