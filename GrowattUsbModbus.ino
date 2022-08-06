@@ -9,8 +9,7 @@
 #include "config.h"
 #include "configfile.h"
 #include "modbus.h"
-
-constexpr auto g_debug = true;
+#include "debug.h"
 
 constexpr auto LED	= LED_BUILTIN;
 constexpr auto ON	= LOW;
@@ -83,11 +82,11 @@ bool sendJson(const DynamicJsonDocument& json)
 
 bool sendError(const StaticJsonDocument<1024>& request, const char* error)
 {
-	DynamicJsonDocument response(2048);
-	response["status"] = "error";
-	response["request"] = request;
-	response["error"] = error;
-	return sendJson(response);
+	DynamicJsonDocument r(2048);
+	r["status"] = "error";
+	r["request"] = request;
+	r["error"] = error;
+	return sendJson(r);
 }
 
 bool readModBusRegisters(const StaticJsonDocument<1024>& request, bool holdingRegs)
@@ -100,7 +99,7 @@ bool readModBusRegisters(const StaticJsonDocument<1024>& request, bool holdingRe
 	if(count <= 0)
 		return sendError(request, "Parameter 'count' must be > 0");
 	if(count > g_modbusBufferSize)
-		return sendError(request, (String("Parameter 'count' must be < ") + String(g_modbusBufferSize)).c_str());
+		return sendError(request, (String("Parameter 'count' must be <= ") + String(g_modbusBufferSize)).c_str());
 
 	const auto err = holdingRegs ? 
 		g_modbus.readHoldingRegisters(g_modbusBuffer, first, count) : 
@@ -109,7 +108,7 @@ bool readModBusRegisters(const StaticJsonDocument<1024>& request, bool holdingRe
 	if(err)
 		return sendError(request, (String("Failed to read modbus registers, error code ") + String(err) + " - " + g_modbus.errorToString(err)).c_str());
 
-	DynamicJsonDocument response(2048);
+	DynamicJsonDocument response(5 * 1024);
 
 	response["status"] = "ok";
 	response["request"] = request;
@@ -139,45 +138,40 @@ void onMqttMessage(const char* topic, byte* payload, unsigned int length)
 	    debugln(error.f_str());
 	    return;
 	}
-	else
+
+	String command = doc["command"];
+
+	if(command.length() == 0)
+		return;
+
+	command.toLowerCase();
+
+	if(command == "reboot")
 	{
-		debugln("deserialization success");
-		const int id = doc["id"];
-		String command = doc["command"];
-		String arg = doc["arg"];
-
-		if(command.length() == 0)
-			return;
-
-		command.toLowerCase();
-
-		if(command == "reboot")
-		{
-			ESP.restart();
-			return;
-		}
-
-		if(command == "resetsettings")
-		{
-			g_wm.resetSettings();
-			delay(1000);
-			ESP.restart();
-			return;
-		}
-
-		if(command == "readinputregisters")
-		{
-			readModBusRegisters(doc, false);
-			return;
-		}
-		if(command == "readholdingregisters")
-		{
-			readModBusRegisters(doc, true);
-			return;
-		}
-
-		debugln(String("id=") + String(id) + String(", command=") + String(command) + String(", arg=") + String(arg));
+		ESP.restart();
+		return;
 	}
+
+	if(command == "resetsettings")
+	{
+		g_wm.resetSettings();
+		delay(1000);
+		ESP.restart();
+		return;
+	}
+
+	if(command == "readinputregisters")
+	{
+		readModBusRegisters(doc, false);
+		return;
+	}
+	if(command == "readholdingregisters")
+	{
+		readModBusRegisters(doc, true);
+		return;
+	}
+
+	sendError(doc, "Unknown request");
 }
 
 void wifiReconnect()
@@ -240,6 +234,31 @@ bool mqttReconnect()
 		}
 	}
 
+	return false;
+}
+
+bool modbusReconnect()
+{
+	if(g_dryRun)
+		return true;
+
+	if(g_modbus.isValid())
+		return true;
+
+	digitalWrite(LED, OFF);
+	
+	const auto t = millis();
+
+	while((millis() - t) < 15000)
+	{
+		if(g_modbus.connect())
+			return true;
+
+		digitalWrite(LED, ON);
+		delay(1000);
+		digitalWrite(LED, OFF);
+		delay(2000);
+	}
 	return false;
 }
 
@@ -313,6 +332,9 @@ void setup()
 	if(!mqttReconnect())
 		ESP.restart();
 
+	if(!modbusReconnect())
+		ESP.restart();
+
 	Serial.println("Boot completed");
 }
 
@@ -322,6 +344,9 @@ void loop()
         wifiReconnect();
 
 	if(!mqttReconnect())
+		ESP.restart();
+
+	if(!modbusReconnect())
 		ESP.restart();
 
 	g_mqttClient.loop();

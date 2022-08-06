@@ -1,11 +1,16 @@
 #include "modbus.h"
+#include "debug.h"
 
 #include <ModbusMaster.h>
 
 ModbusMaster g_modBus;
 
+constexpr auto g_errNotInitialized = 0xff;
+
 bool ModBus::connect()
 {
+	m_valid = false;
+
 	// Try USB first
 	Serial.begin(115200);
     g_modBus.begin(1, Serial);
@@ -22,11 +27,25 @@ bool ModBus::connect()
 	g_modBus.begin(1, Serial);
 	res = g_modBus.readInputRegisters(28, 2);		// dummy read total energy
 
-    return res == g_modBus.ku8MBSuccess;
+    if(res != g_modBus.ku8MBSuccess)
+    	return false;
+
+    m_valid = true;
 }
 
 int ModBus::readInputRegisters(uint16_t* buffer, uint32_t _address, uint32_t _count)
 {
+	if(!m_valid)
+	{
+		if(g_dryRun)
+		{
+			for(uint16_t i=0; i<_count; ++i)
+				buffer[i] = _address + i;
+			return ModbusMaster::ku8MBSuccess;
+		}
+		return g_errNotInitialized;
+	}
+
 	const auto res = g_modBus.readInputRegisters(_address, _count);
 	if (res != g_modBus.ku8MBSuccess)
 		return res;
@@ -37,6 +56,17 @@ int ModBus::readInputRegisters(uint16_t* buffer, uint32_t _address, uint32_t _co
 
 int ModBus::readHoldingRegisters(uint16_t* buffer, uint32_t _address, uint32_t _count)
 {
+	if(!m_valid)
+	{
+		if(g_dryRun)
+		{
+			for(uint16_t i=0; i<_count; ++i)
+				buffer[i] = _address + i;
+			return ModbusMaster::ku8MBSuccess;
+		}		
+		return g_errNotInitialized;
+	}
+
 	const auto res = g_modBus.readHoldingRegisters(_address, _count);
 	if (res != g_modBus.ku8MBSuccess)
 		return res;
@@ -59,6 +89,7 @@ String ModBus::errorToString(int errorCode)
 		case ModbusMaster::ku8MBInvalidFunction:		return "ModbusMaster invalid response function exception";
 		case ModbusMaster::ku8MBResponseTimedOut:		return "ModbusMaster response timed out exception";
 		case ModbusMaster::ku8MBInvalidCRC:			 	return "ModbusMaster invalid response CRC exception";
+		case g_errNotInitialized:					 	return "Connection failed or not initialized";
 
 		default:										return String("Unknown error code ") + String(errorCode);
 	}
