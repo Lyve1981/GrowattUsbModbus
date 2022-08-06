@@ -263,15 +263,15 @@ bool modbusReconnect()
 	
 	const auto t = millis();
 
-	while((millis() - t) < 15000)
+	while((millis() - t) < 20000)
 	{
 		if(g_modbus.connect())
 			return true;
 
 		digitalWrite(LED, ON);
-		delay(1000);
+		delay(500);
 		digitalWrite(LED, OFF);
-		delay(2000);
+		delay(500);
 	}
 	
 	sendError("Modbus connection failed");
@@ -368,8 +368,7 @@ void setup()
 
 void loop()
 {
-    while (WiFi.status() != WL_CONNECTED)
-        wifiReconnect();
+	wifiReconnect();
 
 	if(!mqttReconnect())
 		ESP.restart();

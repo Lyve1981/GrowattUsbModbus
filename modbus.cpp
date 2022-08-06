@@ -13,6 +13,7 @@ bool ModBus::connect()
 
 	// Try USB first
 	Serial.begin(115200);
+	delay(500);
     g_modBus.begin(1, Serial);
 
     auto res = g_modBus.readInputRegisters(55, 2);	// dummy read total energy
@@ -23,10 +24,10 @@ bool ModBus::connect()
     	return true;
     }
 
-    delay(1000);
-
 	// Try older serial inverter as a backup if USB failed
+    delay(500);
 	Serial.begin(9600);
+    delay(500);
 	g_modBus.begin(1, Serial);
 	res = g_modBus.readInputRegisters(28, 2);		// dummy read total energy
 
