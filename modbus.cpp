@@ -18,7 +18,10 @@ bool ModBus::connect()
     auto res = g_modBus.readInputRegisters(55, 2);	// dummy read total energy
 
     if(res == g_modBus.ku8MBSuccess)
+    {
+    	m_valid = true;
     	return true;
+    }
 
     delay(1000);
 
@@ -31,6 +34,7 @@ bool ModBus::connect()
     	return false;
 
     m_valid = true;
+    return true;
 }
 
 int ModBus::readInputRegisters(uint16_t* buffer, uint32_t _address, uint32_t _count)
