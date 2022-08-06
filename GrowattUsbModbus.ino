@@ -108,7 +108,7 @@ bool readModBusRegisters(const StaticJsonDocument<1024>& request, bool holdingRe
 	const int count = request["count"];
 
 	if(first < 0)
-		return sendError(request, "Parameter first must be >= 0");
+		return sendError(request, "Parameter 'index' must be >= 0");
 	if(count <= 0)
 		return sendError(request, "Parameter 'count' must be > 0");
 	if(count > g_modbusBufferSize)
