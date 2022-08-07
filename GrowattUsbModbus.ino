@@ -126,6 +126,31 @@ bool readModBusRegisters(const StaticJsonDocument<1024>& request, bool holdingRe
 	return sendJson(response);
 }
 
+bool writeModBusHoldingRegister(const StaticJsonDocument<1024>& request)
+{
+	const int index = request["index"];
+	const int value = request["value"];
+
+	if(index < 0)		return sendError(request, "Parameter 'index' must be >= 0");
+	if(index > 65535)	return sendError(request, "Parameter 'index' must be <= 65535");
+	if(value < 0)		return sendError(request, "Parameter 'value' must be >= 0");
+	if(value > 65535)	return sendError(request, "Parameter 'value' must be <= 65535");
+
+	const auto err = g_modbus.writeHoldingRegister(index, value);
+
+	if(err)
+		return sendError(request, (String("Failed to write modbus register, error code ") + String(err) + " - " + g_modbus.errorToString(err)).c_str());
+
+	DynamicJsonDocument response(1024);
+
+	response.clear();
+	
+	response["status"] = "ok";
+	response["request"] = request;
+
+	return sendJson(response);
+}
+
 void onMqttMessage(const char* topic, byte* payload, unsigned int length)
 {
 	payload[length] = 0;
@@ -173,6 +198,11 @@ void onMqttMessage(const char* topic, byte* payload, unsigned int length)
 	if(command == "readholdingregisters")
 	{
 		readModBusRegisters(doc, true);
+		return;
+	}
+	if(command == "writeholdingregister")
+	{
+		writeModBusHoldingRegister(doc);
 		return;
 	}
 

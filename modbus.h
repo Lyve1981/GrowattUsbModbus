@@ -12,6 +12,7 @@ public:
 
 	int readInputRegisters  (uint16_t* _buffer, uint32_t _address, uint32_t _count);
 	int readHoldingRegisters(uint16_t* _buffer, uint32_t _address, uint32_t _count);
+	int writeHoldingRegister(uint16_t _address, uint16_t _value);
 
 	String errorToString(int errorCode);
 
