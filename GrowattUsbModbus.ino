@@ -370,7 +370,7 @@ void setup()
     g_httpUpdater.setup(&g_httpServer, "/update", g_otaUser, g_otaPassword);
     g_httpServer.begin();
 
-	Serial.println("Boot completed, Updated!!!");
+	debugln("Boot completed");
 }
 
 void loop()
