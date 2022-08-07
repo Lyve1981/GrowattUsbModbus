@@ -8,7 +8,6 @@ namespace DefaultConfig
 	// MQTT
 	constexpr const char* const mqttServer = "192.168.20.10";
 	constexpr const int32_t mqttPort = 1883;
-	constexpr const char* const mqttClientName = hostName;
 	constexpr const char* const mqttUser = "";
 	constexpr const char* const mqttPassword = "";
 	constexpr const char* const mqttSubTopic = "energy/gromodbus/request";

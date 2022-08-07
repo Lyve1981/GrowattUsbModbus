@@ -216,7 +216,9 @@ bool mqttReconnect()
 	{
 		g_mqttClient.setServer(g_mqttServer.c_str(), g_mqttPort);
 
-		if(g_mqttClient.connect(DefaultConfig::mqttClientName, g_mqttUser.c_str(), g_mqttPassword.c_str(), g_mqttWillTopic.c_str(), 2, true, "offline"))
+		const auto mqttClientName = String("esp8266_") + String(ESP.getChipId());
+
+		if(g_mqttClient.connect(mqttClientName.c_str(), g_mqttUser.c_str(), g_mqttPassword.c_str(), g_mqttWillTopic.c_str(), 2, true, "offline"))
 		{
 			debugln("MQTT connection established");
 			g_mqttClient.setCallback(onMqttMessage);
