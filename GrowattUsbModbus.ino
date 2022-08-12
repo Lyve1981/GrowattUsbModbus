@@ -228,14 +228,16 @@ void onMqttMessage(const char* topic, byte* payload, unsigned int length)
 	sendError(doc, "Unknown request");
 }
 
-bool wifiReconnect()
+bool wifiReconnect(bool forceConfigPortal = false)
 {
     if (WiFi.status() == WL_CONNECTED)
 		return true;
 
 	digitalWrite(LED, ON);
 
-	if(!g_wm.autoConnect("GrowattUSB", "growattusb"))
+	if(forceConfigPortal && !g_wm.startConfigPortal("GrowattUSB", "growattusb"))
+		return false;
+	if(!forceConfigPortal && !g_wm.autoConnect("GrowattUSB", "growattusb"))
 		return false;
 
     while (WiFi.status() != WL_CONNECTED)
@@ -283,6 +285,9 @@ bool mqttReconnect()
 			debugln("MQTT connect failed");
 			if(millis() - t > 20000)
 			{
+				WiFi.disconnect();
+				wifiReconnect(true);
+				delay(1000);
 				ESP.restart();
 				break;
 			}
@@ -423,7 +428,8 @@ void setup()
 
 void loop()
 {
-	reconnectAll();
+	if(!reconnectAll())
+		return;
 
 	g_mqttClient.loop();
 	g_httpServer.handleClient();
