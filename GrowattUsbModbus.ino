@@ -315,24 +315,27 @@ bool modbusReconnect()
 	
 	const auto t = millis();
 
+	auto myDelay = [&](uint32_t ms)
+	{
+		const auto t = millis();
+		while((millis() - t) < ms)
+		{
+			yield();
+			g_mqttClient.loop();
+			g_httpServer.handleClient();
+		}
+	};
+
 	while((millis() - t) < 20000)
 	{
 		if(g_modbus.connect())
 			return true;
 
 		digitalWrite(LED, ON);
-		for(int i=0; i<5; ++i)
-		{
-			g_mqttClient.loop();
-			delay(100);
-		}
+		myDelay(500);
 
 		digitalWrite(LED, OFF);
-		for(int i=0; i<5; ++i)
-		{
-			g_mqttClient.loop();
-			delay(100);
-		}
+		myDelay(500);
 	}
 	
 	sendError("Modbus connection failed");
@@ -445,10 +448,9 @@ void loop()
 	g_httpServer.handleClient();
 
 	auto t = millis() & 0x1ff;
+
 	if(t < 50)
 		digitalWrite(LED, ON);
 	else
 		digitalWrite(LED, OFF);
-
-	delay(10);
 }
