@@ -107,12 +107,25 @@ bool readModBusRegisters(const StaticJsonDocument<1024>& request, bool holdingRe
 	if(count > g_modbusBufferSize)
 		return sendError(request, (String("Parameter 'count' must be <= ") + String(g_modbusBufferSize)).c_str());
 
-	const auto err = holdingRegs ? 
-		g_modbus.readHoldingRegisters(g_modbusBuffer, first, count) : 
-		g_modbus.readInputRegisters(g_modbusBuffer, first, count);
+	constexpr auto retryCount = 3;
+	int errorCount = 0;
 
-	if(err)
-		return sendError(request, (String("Failed to read modbus registers, error code ") + String(err) + " - " + g_modbus.errorToString(err)).c_str());
+	while(true)
+	{
+		const auto err = holdingRegs ? 
+			g_modbus.readHoldingRegisters(g_modbusBuffer, first, count) : 
+			g_modbus.readInputRegisters(g_modbusBuffer, first, count);
+
+		if(!err)
+			break;
+
+		++errorCount;
+
+		if(err != ModbusMaster::ku8MBResponseTimedOut || errorCount == retryCount)
+			return sendError(request, (String("Failed to read modbus registers, error code ") + String(err) + " - " + g_modbus.errorToString(err)).c_str());
+
+		delay(100);
+	}
 
 	DynamicJsonDocument response(5 * 1024);
 
