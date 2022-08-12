@@ -16,6 +16,9 @@ public:
 
 	String errorToString(int errorCode);
 
+	uint32_t getBaudRate() const { return m_baudRate; }
+
 private:
 	bool m_valid = false;
+	uint32_t m_baudRate = 0;
 };

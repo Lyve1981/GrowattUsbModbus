@@ -66,6 +66,7 @@ bool sendBuffer(const char* buffer, uint32_t len)
 bool sendJson(DynamicJsonDocument& json)
 {
 	json["timestamp"] = millis();
+	json["baud"] = g_modbus.getBaudRate();
 
 	const auto len = serializeJson(json, g_jsonOutBuffer);
 

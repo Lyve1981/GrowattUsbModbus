@@ -21,6 +21,7 @@ bool ModBus::connect()
     if(res == g_modBus.ku8MBSuccess)
     {
     	m_valid = true;
+    	m_baudRate = 115200;
     	return true;
     }
 
@@ -35,6 +36,7 @@ bool ModBus::connect()
     	return false;
 
     m_valid = true;
+    m_baudRate = 9600;
     return true;
 }
 
