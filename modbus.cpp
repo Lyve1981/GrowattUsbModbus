@@ -7,9 +7,16 @@ ModbusMaster g_modBus;
 
 constexpr auto g_errNotInitialized = 0xff;
 
+void idleCallback()
+{
+	yield();
+}
+
 bool ModBus::connect()
 {
 	m_valid = false;
+
+	g_modBus.idle(idleCallback);
 
 	// Try USB first
 	Serial.begin(115200);
