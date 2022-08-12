@@ -165,6 +165,13 @@ bool writeModBusHoldingRegister(const StaticJsonDocument<1024>& request)
 	return sendJson(response);
 }
 
+void resetSettings()
+{
+	g_wm.resetSettings();
+	delay(1000);
+	ESP.restart();	
+}
+
 void onMqttMessage(const char* topic, byte* payload, unsigned int length)
 {
 	payload[length] = 0;
@@ -198,9 +205,7 @@ void onMqttMessage(const char* topic, byte* payload, unsigned int length)
 
 	if(command == "resetsettings")
 	{
-		g_wm.resetSettings();
-		delay(1000);
-		ESP.restart();
+		resetSettings();
 		return;
 	}
 
@@ -223,14 +228,15 @@ void onMqttMessage(const char* topic, byte* payload, unsigned int length)
 	sendError(doc, "Unknown request");
 }
 
-void wifiReconnect()
+bool wifiReconnect()
 {
     if (WiFi.status() == WL_CONNECTED)
-		return;
+		return true;
 
 	digitalWrite(LED, ON);
 
-	g_wm.autoConnect("GrowattUSB", "growattusb");
+	if(!g_wm.autoConnect("GrowattUSB", "growattusb"))
+		return false;
 
     while (WiFi.status() != WL_CONNECTED)
     {
@@ -239,6 +245,8 @@ void wifiReconnect()
     }
 
 	digitalWrite(LED, OFF);
+
+	return true;
 }
 
 bool mqttReconnect()
@@ -314,6 +322,7 @@ bool modbusReconnect()
 	
 	sendError("Modbus connection failed");
 
+	// give us some time to report the modbus connection error via MQTT
 	{
 		const auto t = millis();
 		while((millis() - t) < 3000)
@@ -321,6 +330,15 @@ bool modbusReconnect()
 	}
 
 	return false;
+}
+
+bool reconnectAll()
+{
+	if(!wifiReconnect())		return false;
+	if(!mqttReconnect())		return false;
+	if(!modbusReconnect())		return false;
+
+	return true;
 }
 
 void setup()
@@ -394,23 +412,7 @@ void setup()
 
     g_wm.setConfigPortalTimeout(60);
 
-	digitalWrite(LED, ON);
-    const auto success = g_wm.autoConnect("GrowattUSB", "growattusb");
-	digitalWrite(LED, OFF);
-
-	if(!success)
-    {
-    	ESP.restart();
-    	return;
-    }
-
-    while (WiFi.status() != WL_CONNECTED)
-        wifiReconnect();
-
-	if(!mqttReconnect())
-		ESP.restart();
-
-	if(!modbusReconnect())
+	if(!reconnectAll())
 		ESP.restart();
 
     g_httpUpdater.setup(&g_httpServer, "/update", g_otaUser, g_otaPassword);
@@ -421,13 +423,7 @@ void setup()
 
 void loop()
 {
-	wifiReconnect();
-
-	if(!mqttReconnect())
-		ESP.restart();
-
-	if(!modbusReconnect())
-		ESP.restart();
+	reconnectAll();
 
 	g_mqttClient.loop();
 	g_httpServer.handleClient();
