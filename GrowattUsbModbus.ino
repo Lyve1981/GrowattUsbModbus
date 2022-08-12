@@ -131,6 +131,7 @@ bool readModBusRegisters(const StaticJsonDocument<1024>& request, bool holdingRe
 
 	response["status"] = "ok";
 	response["request"] = request;
+	response["retryCount"] = errorCount;
 
 	auto arr = response["data"].to<JsonArray>();
 
@@ -320,9 +321,18 @@ bool modbusReconnect()
 			return true;
 
 		digitalWrite(LED, ON);
-		delay(500);
+		for(int i=0; i<5; ++i)
+		{
+			g_mqttClient.loop();
+			delay(100);
+		}
+
 		digitalWrite(LED, OFF);
-		delay(500);
+		for(int i=0; i<5; ++i)
+		{
+			g_mqttClient.loop();
+			delay(100);
+		}
 	}
 	
 	sendError("Modbus connection failed");
