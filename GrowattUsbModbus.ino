@@ -67,6 +67,9 @@ bool sendJson(DynamicJsonDocument& json)
 {
 	json["timestamp"] = millis();
 	json["baud"] = g_modbus.getBaudRate();
+	json["rssi"] = WiFi.RSSI();
+	json["ssid"] = WiFi.SSID();
+	json["ip"] = WiFi.localIP().toString();
 
 	const auto len = serializeJson(json, g_jsonOutBuffer);
 
