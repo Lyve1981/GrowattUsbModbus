@@ -91,11 +91,11 @@ bool sendError(const StaticJsonDocument<1024>* request, const char* error)
 
 bool sendError(const StaticJsonDocument<1024>& request, const char* error)
 {
-	sendError(&request, error);
+	return sendError(&request, error);
 }
 bool sendError(const char* error)
 {
-	sendError(nullptr, error);
+	return sendError(nullptr, error);
 }
 
 bool readModBusRegisters(const StaticJsonDocument<1024>& request, bool holdingRegs)
