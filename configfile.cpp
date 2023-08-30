@@ -1,7 +1,6 @@
 #include "configfile.h"
 
 #include "LittleFS.h"
-#include <String.h>
 
 #include "debug.h"
 
