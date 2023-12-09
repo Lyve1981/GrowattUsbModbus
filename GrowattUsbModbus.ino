@@ -527,7 +527,12 @@ void loop()
 
 	loopConnections();
 
-	auto t = millis() & 0x1ff;
+	auto t = millis();
+
+	if(g_connectionEthernet.isInitialized())
+		t &= 0x3ff;
+	else
+		t &= 0x1ff;
 
 	if(t < 40)
 		digitalWrite(LED, ON);
