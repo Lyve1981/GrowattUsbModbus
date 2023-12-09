@@ -1,4 +1,3 @@
-#include <ESP8266WiFi.h>
 #include <ESP8266HTTPUpdateServer.h>
 #include <PubSubClient.h>
 #include <WiFiManager.h>
@@ -11,18 +10,23 @@
 #include "modbus.h"
 #include "debug.h"
 
+#include "connectionEthernet.h"
+#include "connectionWifi.h"
+
 constexpr auto LED	= LED_BUILTIN;
 constexpr auto ON	= LOW;
 constexpr auto OFF	= HIGH;
 
-ConfigFile					g_config;
+ConfigFile							g_config;
 
-WiFiManager					g_wm;
-WiFiClient					g_wifiClient;
-PubSubClient				g_mqttClient(g_wifiClient);
-ModBus						g_modbus;
-ESP8266WebServer			g_httpServer(80);
-ESP8266HTTPUpdateServer		g_httpUpdater;
+WiFiManager							g_wm;
+PubSubClient 						g_mqttClient;
+ModBus								g_modbus;
+ESP8266WebServer					g_httpServer(80);
+ESP8266HTTPUpdateServer				g_httpUpdater;
+ConnectionEthernet					g_connectionEthernet;
+ConnectionWifi						g_connectionWifi;
+Connection*							g_connection = nullptr;
 
 // runtime config
 String		g_mqttServer;
@@ -57,7 +61,7 @@ bool sendBuffer(const char* buffer, uint32_t len)
 		buf += sendSize;
 	}
 	g_mqttClient.endPublish();
-
+	g_mqttClient.flush();
 	return true;
 }
 
@@ -171,7 +175,7 @@ void resetSettings()
 {
 	g_wm.resetSettings();
 	delay(1000);
-	ESP.restart();	
+	ESP.restart();
 }
 
 void onMqttMessage(const char* topic, byte* payload, unsigned int length)
@@ -230,37 +234,75 @@ void onMqttMessage(const char* topic, byte* payload, unsigned int length)
 	sendError(doc, "Unknown request");
 }
 
-bool wifiReconnect(bool forceConfigPortal = false)
+bool runConfigPortal(bool force)
 {
-    if (WiFi.status() == WL_CONNECTED)
+	const auto usingEthernet = g_connectionEthernet.isInitialized();
+
+	bool result = usingEthernet;
+
+	if(usingEthernet || force)
+	{
+		g_wm.setConfigPortalBlocking(true);
+		result |= g_wm.startConfigPortal("GrowattUSB", "growattusb");
+	}
+	else
+	{
+		result = g_wm.autoConnect("GrowattUSB", "growattusb");
+	}
+
+	return result;
+}
+
+void runConfigAndRestart()
+{
+	runConfigPortal(true);
+	delay(1000);
+	ESP.restart();
+}
+
+bool wifiReconnect()
+{
+    if (g_connectionWifi.isConnected())
 		return true;
 
 	digitalWrite(LED, ON);
 
-	if(forceConfigPortal && !g_wm.startConfigPortal("GrowattUSB", "growattusb"))
-		return false;
-	if(!forceConfigPortal && !g_wm.autoConnect("GrowattUSB", "growattusb"))
+	if(!runConfigPortal(false))
 		return false;
 
-    while (WiFi.status() != WL_CONNECTED)
+    while (!g_connectionWifi.isConnected())
     {
 		delay(200);
 		digitalWrite(LED, !digitalRead(LED));
     }
+
+	debug("Wifi now connected, my ip ");
+	debugln(WiFi.localIP().toString());
 
 	digitalWrite(LED, OFF);
 
 	return true;
 }
 
+bool ethernetReconnect()
+{
+	if (g_connectionEthernet.isConnected())
+		return true;
+
+	return g_connectionEthernet.connect();
+}
+
 bool mqttReconnect()
 {
-    if (g_mqttServer.length() == 0)
-        return false;
+	if(!g_connection || !g_connection->isConnected())
+		return false;
 
-    if (WiFi.status() != WL_CONNECTED)
-        return false;
-
+    if (g_mqttServer.length() == 0 || g_mqttPort == 0)
+	{
+		runConfigAndRestart();
+		return false;
+	}
+	
     if (g_mqttClient.connected())
         return true;
 
@@ -270,6 +312,7 @@ bool mqttReconnect()
 
 	while(true)
 	{
+		g_mqttClient.setClient(*g_connection->getClient());
 		g_mqttClient.setServer(g_mqttServer.c_str(), g_mqttPort);
 
 		const auto mqttClientName = String("esp8266_") + String(ESP.getChipId());
@@ -287,10 +330,7 @@ bool mqttReconnect()
 			debugln("MQTT connect failed");
 			if(millis() - t > 20000)
 			{
-				WiFi.disconnect();
-				wifiReconnect(true);
-				delay(1000);
-				ESP.restart();
+				runConfigAndRestart();
 				break;
 			}
 			else
@@ -302,6 +342,14 @@ bool mqttReconnect()
 	}
 
 	return false;
+}
+
+void loopConnections()
+{
+	g_mqttClient.loop();
+	g_httpServer.handleClient();
+	if (g_connection)
+		g_connection->loop();
 }
 
 bool modbusReconnect()
@@ -321,9 +369,7 @@ bool modbusReconnect()
 		const auto t = millis();
 		while((millis() - t) < ms)
 		{
-			yield();
-			g_mqttClient.loop();
-			g_httpServer.handleClient();
+			loopConnections();
 		}
 	};
 
@@ -353,8 +399,14 @@ bool modbusReconnect()
 
 bool reconnectAll()
 {
-	if(!wifiReconnect())		return false;
+	if(!ethernetReconnect())
+	{
+		if(!wifiReconnect())
+			return false;
+	}
+
 	if(!mqttReconnect())		return false;
+
 	if(!modbusReconnect())		return false;
 
 	return true;
@@ -362,17 +414,29 @@ bool reconnectAll()
 
 void setup()
 {
-	LittleFS.begin();
-
 	if(g_debug)
 		Serial.begin(115200);	// debug
 
 	pinMode(LED, OUTPUT);
 
-    WiFi.hostname(g_config.get("hostname", DefaultConfig::hostName));
-    WiFi.mode(WIFI_STA);
+	LittleFS.begin();
 
-    delay(2000);
+	delay(500);
+
+	debugln("Creating ethernet connection");
+
+	if(g_connectionEthernet.initialize())
+	{
+		g_connection = &g_connectionEthernet;
+	}
+	else if(g_connectionWifi.initialize())
+	{
+		g_connection = &g_connectionWifi;
+	}
+	else
+	{
+		ESP.restart();
+	}
 
 	g_mqttServer = g_config.get("g_mqttServer", DefaultConfig::mqttServer);
 	g_mqttPort = g_config.get("g_mqttPort", String(DefaultConfig::mqttPort).c_str()).toInt();
@@ -383,6 +447,11 @@ void setup()
 	g_mqttWillTopic = g_config.get("g_mqttWillTopic", DefaultConfig::mqttWillTopic);
 	g_otaUser = g_config.get("g_otaUser", DefaultConfig::otaUser);
 	g_otaPassword = g_config.get("g_otaPassword", DefaultConfig::otaPassword);
+
+    WiFi.hostname(g_config.get("hostname", DefaultConfig::hostName));
+    WiFi.mode(WIFI_STA);
+
+    delay(2000);
 
     auto mqttServer = new WiFiManagerParameter("server", "MQTT Server", g_mqttServer.c_str(), 32);
     auto mqttPort = new WiFiManagerParameter("port", "MQTT Port", String(g_mqttPort).c_str(), 5);
@@ -403,6 +472,10 @@ void setup()
     g_wm.addParameter(mqttTopicWill);
     g_wm.addParameter(otaUser);
     g_wm.addParameter(otaPassword);
+
+	g_wm.setDebugOutput(false);
+
+	g_wm.setBreakAfterConfig(g_connectionEthernet.isInitialized());
 
     g_wm.setSaveParamsCallback([&]()
     {
@@ -445,12 +518,11 @@ void loop()
 	if(!reconnectAll())
 		return;
 
-	g_mqttClient.loop();
-	g_httpServer.handleClient();
+	loopConnections();
 
 	auto t = millis() & 0x1ff;
 
-	if(t < 50)
+	if(t < 40)
 		digitalWrite(LED, ON);
 	else
 		digitalWrite(LED, OFF);
