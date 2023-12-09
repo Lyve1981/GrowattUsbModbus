@@ -44,8 +44,6 @@ bool sendBuffer(const char* buffer, uint32_t len)
 	if(!buffer || !len)
 		return false;
 
-	constexpr auto chunkSize = 256;
-
 	g_mqttClient.beginPublish(g_mqttPubTopic.c_str(), (uint32_t)len, false);
 	auto remaining = len;
 	const uint8_t* buf = (const uint8_t*)buffer;
