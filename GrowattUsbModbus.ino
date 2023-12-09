@@ -178,16 +178,10 @@ void resetSettings()
 	ESP.restart();
 }
 
-void onMqttMessage(const char* topic, byte* payload, unsigned int length)
+void handleMqttMessage(const char* topic, const char* payload)
 {
-	payload[length] = 0;
-
-	char* json = (char*)payload;
-
-	debugln("MQTT message: topic = " + String(topic) + ", payload = " + String((char*)payload));
-
 	StaticJsonDocument<1024> doc;
-	const auto error = deserializeJson(doc, json);
+	const auto error = deserializeJson(doc, payload);
 
 	if(error)
 	{
@@ -232,6 +226,19 @@ void onMqttMessage(const char* topic, byte* payload, unsigned int length)
 	}
 
 	sendError(doc, "Unknown request");
+}
+
+void onMqttMessage(const char* topic, byte* payload, unsigned int length)
+{
+	payload[length] = 0;
+
+	const char* string = (const char*)payload;
+
+	debugln("MQTT message: topic = " + String(topic) + ", payload = " + String(string));
+
+	digitalWrite(LED, ON);
+	handleMqttMessage(topic, string);
+	digitalWrite(LED, OFF);
 }
 
 bool runConfigPortal(bool force)
